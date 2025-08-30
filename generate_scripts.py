@@ -12,6 +12,9 @@ def load_excel(file_path):
             .fillna("") # 其他列默认值为空
         )
 
+        if "code" in df.columns:
+            df = df[df["code"] != ""]
+
         # 转 dict & 去掉空 key
         rows = [
             {k: v for k, v in row.items() if v != ""}
