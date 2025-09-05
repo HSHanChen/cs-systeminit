@@ -1,179 +1,27 @@
-"""
-@Author: Chan Sheen
-@Date: 2025/9/1 17:49
-@File: system_init.py
-@Description: 
-"""
-import hashlib
-import re
-import pandas as pd
-import pyodbc
-import yaml
-import json
-from collections import defaultdict
-from decimal import Decimal
-import datetime
-
-from django.template.defaultfilters import length
-from django.urls import include
-from numpy.ma.extras import unique
-from tinycss2.nth import parse_b
+from .utils import truncate_name, parse_bool, bracket, bool_to_int, build_script
 
 
-# ---------- JSON 序列化 ----------
-def json_converter(o):
-    if isinstance(o, (datetime.date, datetime.datetime)):
-        return o.isoformat()
-    if isinstance(o, Decimal):
-        return float(o)
-    return str(o)
-
-# ---------- 约束、索引长度限制 ----------
-def truncate_name(name, max_len=128):
-    """如果 name 超过 max_len，截断并加 8 位哈希保证唯一性"""
-    if len(name) <= max_len:
-        return name
-    # 取前 max_len-9 个字符 + '_' + 8 位 hash
-    hash_suffix = hashlib.md5(name.encode("utf-8")).hexdigest()[:8]
-    return name[:max_len - 9] + "_" + hash_suffix
-
-# ---------- 统一生成器 ----------
-def gen_sql_scripts(
-        excel_file,
-        constraints_file,
-        functions_file,
-        applications_file,
-        json_out="configs.json",
-        sql_out="system_init.sql"
-):
-    def bool_to_int(val):
-        """
-        将布尔值或空值转换为 0/1
-        True -> 1, False/None/"" -> 0
-        """
-        if isinstance(val, str):
-            val = val.strip().lower() in {"1", "true", "yes", "y", "是"}
-        return 1 if val else 0
-
-
-    constraint_max_length = 128
-
-    # ---------- 工具函数 ----------
-    def bracket(name): return f"[{name}]"
-
-    def parse_bool(val): return str(val).strip().lower() in {"1","true","y","yes","是"}
-
-    # ---------- 字段长度格式 ----------
-    def type_with_length(col_type, length="", scale=""):
-        col_type = (col_type or "").upper()
-        length = str(length or "").strip()
-        scale = str(scale or "").strip()
-
-        if col_type in ("DECIMAL", "NUMERIC"):
-            if length and scale:
-                return f"{col_type}({length},{scale})"
-            elif length:
-                return f"{col_type}({length})"
-            else:
-                return col_type
+def type_with_length(col_type, length="", scale=""):
+    col_type = (col_type or "").upper()
+    length = str(length or "").strip()
+    scale = str(scale or "").strip()
+    if col_type in ("DECIMAL","NUMERIC"):
+        if length and scale:
+            return f"{col_type}({length},{scale})"
+        elif length:
+            return f"{col_type}({length})"
         else:
-            if length:
-                return f"{col_type}({length})"
-            else:
-                return col_type
+            return col_type
+    else:
+        if length:
+            return f"{col_type}({length})"
+        else:
+            return col_type
 
-    def sql_lit_default(val, is_string):
-        if not val or str(val).strip() == "": return ""
-        raw = str(val).strip()
-        if "(" in raw and raw.endswith(")"): return raw
-        return "N'" + raw.replace("'","''") + "'" if is_string else raw
-
-    def write_block(delete_stmt, insert_stmt):
-        sqls.append(delete_stmt)
-        sqls.append(insert_stmt)
-        sqls.append("GO\n")
-
-    # ---------- 1. 读取 Excel ----------
-    sheets = pd.ExcelFile(excel_file, engine="openpyxl")
-
-    columns, tables, table_columns = {}, [], defaultdict(list)
-
-    # ---------- 读取 Columns ----------
-    if "Columns" in sheets.sheet_names:
-        df = pd.read_excel(sheets, "Columns", dtype=str).fillna({"control": "TextBox"}).fillna("")
-        columns = {
-            row["code"].strip(): {k.strip(): v for k, v in row.items() if v != ""}
-            for row in df.to_dict(orient="records")
-            if row.get("code") and row["code"].strip().lower() != "tag"
-        }
-
-    # ---------- 读取 Tables ----------
-    if "Tables" in sheets.sheet_names:
-        df = pd.read_excel(sheets, "Tables", dtype=str).fillna("")
-        tables = []
-        for row in df.to_dict(orient="records"):
-            row = {k.strip(): v for k, v in row.items() if v != ""}
-            table_name = row.get("table_name")
-            if not table_name:
-                continue
-            ct = row.get("change_type", "")
-            row["change_types"] = [x.strip() for x in ct.split(",") if x.strip()] if ct else []
-            tables.append(row)
-
-    # ---------- 读取 Table_Columns ----------
-    if "Table_Columns" in sheets.sheet_names:
-        df = pd.read_excel(sheets, "Table_Columns", dtype=str).fillna("")
-        for row in df.to_dict(orient="records"):
-            # 去掉空字符串
-            row = {k.strip(): v for k, v in row.items() if v != ""}
-
-            table_name, col_code = row.get("table_name"), row.get("column")
-            if not table_name or not col_code:
-                continue
-
-            # 取 Columns 中的基础定义
-            base_col = columns.get(col_code, {}).copy()
-
-            # 合并 Table_Columns 中的定义
-            merged_col = {**base_col, **row}
-
-            # column 使用英文列明
-            merged_col["column"] = merged_col.get("column") or merged_col.get("code")
-
-            # name 优先取 Table_Columns 的值，如果没有就取 Columns 的值
-            merged_col["name"] = row.get("name") or base_col.get("name") or merged_col["column"]
-
-            # 布尔化
-            merged_col["pk"] = parse_bool(merged_col.get("ispk", False))
-            merged_col["identity"] = parse_bool(merged_col.get("identity", False))
-            merged_col["nullable"] = parse_bool(merged_col.get("nullable", True))
-
-            # 追加到 table_columns
-            table_columns[table_name].append(merged_col)
-
-    # ---------- 2. 读取 Constraints & Functions & Applications ----------
-    with open(constraints_file, "r", encoding="utf-8") as f:
-        constraints = yaml.safe_load(f)
-    with open(functions_file, "r", encoding="utf-8") as f:
-        functions = yaml.safe_load(f)
-    with open(applications_file, "r", encoding="utf-8") as f:
-        applications = yaml.safe_load(f)
-
-    # ---------- 3. 导出 JSON ----------
-    with open(json_out, "w", encoding="utf-8") as f:
-        json.dump({
-            "columns":columns,
-            "tables":tables,
-            "table_columns":dict(table_columns),
-            "constraints":constraints,
-            "functions":functions,
-            "applications":applications
-        },f, ensure_ascii=False, indent=4, default=json_converter)
-
-    # ---------- 4. 生成 SQL ----------
+def generate_create_table_sql(columns, tables, table_columns, constraints):
+    constraint_max_length = 128
     sqls = []
     table_all_columns = {}
-    # 遍历表
     for table in tables:
         table_name = table["table_name"]
         cols = table_columns.get(table_name, [])
@@ -211,7 +59,11 @@ def gen_sql_scripts(
             # 判断是否需要 Old_XXX 字段
             if is_changed:
                 # 把 change_type 逗号拆分开为列表
-                change_types = [x.strip() for x in change_type.split(",") if x.strip()]
+                change_types = (
+                    [x.strip() for x in change_type.split(",") if x.strip()]
+                    if change_type
+                    else (print(f"[警告] Excel 的 Tables 中标记了{table_name}为变动表，但列没有配置 change_type，已跳过。") or [])
+                )
                 col_cfg = columns.get(col_name, {})
                 if col_cfg:
                     col_changetype = col_cfg.get("changetype", "").strip()
@@ -231,7 +83,8 @@ def gen_sql_scripts(
             extra_cols = {
                 "Emp1": "[Emp1] INT NULL",
                 "OrderBy": "[OrderBy] INT NULL",
-                "Disabled": "[Disabled] BIT NULL"
+                "Disabled": "[Disabled] BIT NULL",
+                "OrgAbbr": "[OrgAbbr] NVARCHAR(50) NULL"
             }
             existing_cols = {c.split()[0].strip("[]") for c in col_sqls}  # 已有列名集合
             for col_name, col_def in extra_cols.items():
@@ -278,24 +131,39 @@ def gen_sql_scripts(
                     + (f" INCLUDE({include_cols})" if has_include else "")
                     + ";\nGO\n"
                 )
-
         # ---------- CREATE TABLE ----------
-        sqls.append(
-            f"IF OBJECT_ID(N'{table_name}',N'U') IS NOT NULL\n    DROP TABLE {table_name};\nGO\n"
-            f"CREATE TABLE {table_name} (\n    " +
-            ",\n    ".join(col_sqls) +  # 列定义
-            pk_sql +  # 主键约束
-            (",\n    " + ",\n    ".join(unique_sqls) if unique_sqls else "") +  # UNIQUE 约束
-            "\n);\nGO\n"
+        create_table_sql = (
+                f"IF OBJECT_ID(N'{table_name}',N'U') IS NOT NULL\n    DROP TABLE {table_name};\nGO\n"
+                f"CREATE TABLE {table_name} (\n    " +
+                ",\n    ".join(col_sqls) +  # 列定义
+                pk_sql +  # 主键约束
+                (",\n    " + ",\n    ".join(unique_sqls) if unique_sqls else "") +  # UNIQUE 约束
+                "\n);\nGO\n"
         )
+        sqls.append(create_table_sql)
 
-        # 索引构建
-        sqls.append("\n".join(index_sqls))
+        # 索引构建（仅当有索引时才加入）
+        if index_sqls:
+            sqls.append("\n".join(index_sqls))
+        # # ---------- CREATE TABLE ----------
+        # sqls.append(
+        #     f"IF OBJECT_ID(N'{table_name}',N'U') IS NOT NULL\n    DROP TABLE {table_name};\nGO\n"
+        #     f"CREATE TABLE {table_name} (\n    " +
+        #     ",\n    ".join(col_sqls) +  # 列定义
+        #     pk_sql +  # 主键约束
+        #     (",\n    " + ",\n    ".join(unique_sqls) if unique_sqls else "") +  # UNIQUE 约束
+        #     "\n);\nGO\n"
+        # )
+        #
+        # # 索引构建
+        # sqls.append("\n".join(index_sqls))
 
-    # --- Functions ---
+    return sqls, table_all_columns
+
+def generator_function_sql(columns, tables, table_columns, functions, table_all_columns):
     oper_map = {"创建": 1, "变更": 2, "失效": 3, "合并": 4}
     funcs = functions.get("functions")
-    # 遍历 functions
+    sqls = []
     for func in funcs:
         # 获取功能ID、功能Code 功能名称 功能对应的表
         func_id, func_code, func_name, func_table, func_params = func.get("id"), func.get("code"), func.get("name"), func.get("table"), func.get("params", [])
@@ -310,34 +178,34 @@ def gen_sql_scripts(
 
         # 构建数据源条件
         conditions = []
-        if "历史" in func_name and "Closed" in table_cols: conditions.append("a.Closed = 1")
-        if "历史" not in func_name:
+        base_where = []
+        order_by = []
+        if not func_name:
+            continue
+        if "历史" in func_name:
+            if "Closed" in table_cols:
+                base_where.append("a.Closed = 1")
+                order_by.append("ORDER BY a.ClosedTime DESC")
+        else:
             for k, v in oper_map.items():
                 if k in func_name and "OperType" in table_cols:
-                    conditions.append(f"a.OperType = {v}"); break
-            if "Closed" in table_cols: conditions.append("a.Closed = 0")
+                    base_where.append(f"a.OperType = {v}");
+                    break
+            if "Closed" in table_cols:
+                base_where.append("a.Closed = 0")
 
-        base_where = "\n  AND ".join(conditions) if conditions else ""
+        # base_where = "\n  AND ".join(conditions) if conditions else ""
 
         # 遍历功能参数，收集非空条件
         param_conditions = [fp.get("condition") for fp in func_params if fp.get("condition")]
 
-        # 合并所有条件
-        if base_where:
-            conditions.append(base_where)
-        if param_conditions:
-            conditions.extend(param_conditions)
+        conditions = list(dict.fromkeys(base_where + param_conditions))
 
         # 数据源
         datasource = f"SELECT a.*\nFROM {func_table} a"
         if conditions:
             datasource += "\nWHERE " + "\n  AND ".join(conditions)
-
-        def build_script(fields: list):
-            """根据字段列表生成 SELECT 语句，如果为空返回 NULL"""
-            if not fields:
-                return "NULL"
-            return f"'SELECT {', '.join(fields)}'"
+            datasource += "\n" + "".join(order_by)
 
         # ---- 新增、修改脚本 ----
         add_new_fields, update_fields = [], []
@@ -403,34 +271,34 @@ def gen_sql_scripts(
         sqls.append(f"DELETE FROM mc_FunctionTools WHERE FCID='{func_id}';\nGO\n")
         tool_attr_map = {
             "execsp": """<tool>
-  <hidden>0</hidden>
-  <sqlbeforeclick></sqlbeforeclick>
-  <sqlwhenclick></sqlwhenclick>
-  <sqlafterclick></sqlafterclick>
-  <linkcol></linkcol>
-  <hidecol></hidecol>
-  <confirm>0</confirm>
-  <refresh>1</refresh>
-  <cssclass>mc-btn-primary</cssclass>
-  <icon>antd-right</icon>
-  <color>#3293FF</color>
-  <size></size>
-  <toolprop class="linked-hash-map"/>
-  <toolstyle></toolstyle>
-  <showmode>0</showmode>
-</tool>""",
+      <hidden>0</hidden>
+      <sqlbeforeclick></sqlbeforeclick>
+      <sqlwhenclick></sqlwhenclick>
+      <sqlafterclick></sqlafterclick>
+      <linkcol></linkcol>
+      <hidecol></hidecol>
+      <confirm>0</confirm>
+      <refresh>1</refresh>
+      <cssclass>mc-btn-primary</cssclass>
+      <icon>antd-right</icon>
+      <color>#3293FF</color>
+      <size></size>
+      <toolprop class="linked-hash-map"/>
+      <toolstyle></toolstyle>
+      <showmode>0</showmode>
+    </tool>""",
             "popapp": """<tool>
-  <hidden>0</hidden>
-  <popapp></popapp>
-  <popappcondi><![CDATA[]]></popappcondi>
-  <confirm>0</confirm>
-  <refresh>0</refresh>
-  <cssclass>mc-btn-dashed</cssclass>
-  <icon>public-custom_query</icon>
-  <color>#3293FF</color>
-  <size></size>
-  <showmode>2</showmode>
-</tool>"""}
+      <hidden>0</hidden>
+      <popapp></popapp>
+      <popappcondi><![CDATA[]]></popappcondi>
+      <confirm>0</confirm>
+      <refresh>0</refresh>
+      <cssclass>mc-btn-dashed</cssclass>
+      <icon>public-custom_query</icon>
+      <color>#3293FF</color>
+      <size></size>
+      <showmode>2</showmode>
+    </tool>"""}
         for tool in func.get("tools", []):
             tool_code, tool_name, tool_type, tool_xorder = tool.get("code"), tool.get("name"), tool.get("type"), tool.get("xorder")
             tool_attr = tool_attr_map.get(tool_type, 'NULL')
@@ -444,7 +312,7 @@ def gen_sql_scripts(
 
         func_cols_map = {"INT": "Integer", "DATETIME": "DateTime", "DATE": "DateTime", "DECIMAL": "Number", "BIT": "Boolean", "VARCHAR": "String",
                          "NVARCHAR": "String"}
-        length_map = {"INT":8, "BIGINT": 16, "DATETIME": 8, "DATE": 8, "BIT": 1}
+        length_map = {"INT": 8, "BIGINT": 16, "DATETIME": 8, "DATE": 8, "BIT": 1}
         insert_values = []
 
         for idx, func_col in enumerate(cols_for_func, start=1):
@@ -460,7 +328,7 @@ def gen_sql_scripts(
             # 条件判断是否插入 Old_ 字段
             if is_old:
                 insert_old = False
-                if is_changed and ("变更" in func_name or "变动" in func_name):
+                if is_changed and any(x in func_name for x in {"变更", "变动", "调动"}):
                     insert_old = True
                 elif "操作历史" in func_name:
                     insert_old = True
@@ -486,7 +354,7 @@ def gen_sql_scripts(
             col_title = col_cfg_table.get("name") or col_cfg_base.get("name") or base_col_name
             is_identity = 1 if col_cfg_table.get("identity") else 0
             is_pkey = 1 if col_cfg_table.get("ispk") else 0
-            nullable = 1 if col_cfg_table.get("nullable") else 0
+            nullable = 0 if col_cfg_table.get("nullable") else 1
             locked = 1 if col_cfg_table.get("locked") else 0
             hidden = bool_to_int(col_cfg_table.get("hidden"))
             form_hidden = 1 if col_cfg_table.get("form_hidden") else 0
@@ -500,10 +368,13 @@ def gen_sql_scripts(
 
             if is_old:
                 col_title = f"原{col_title}"
-                if is_changed and ("变更" in func_name or "变动" in func_name):
+                if is_changed and any(x in func_name for x in {"变更", "变动", "调动"}):
                     locked, grid_hidden = 1, 1
                 elif "操作历史" in func_name:
                     locked, grid_hidden = 1, 0
+            else:
+                if col_name not in {"ID", "EmpID", "LinkUrl", "WfInstanceID", "RegBy", "RegTime", "Closed", "ClosedTime", "ClosedBy", "BeginDate", "OperType", "OrgCode"}:
+                    col_title = f"新{col_title}"
 
             attr_parts = [
                 f"<col>",
@@ -516,7 +387,7 @@ def gen_sql_scripts(
             ]
 
             if source:
-                attr_parts.append(f"  <source>![CDATA[{source}]]</source>")
+                attr_parts.append(f"  <source>{source}</source>")
             if data_format:
                 attr_parts.append(f"  <format>{data_format}</format>")
 
@@ -547,8 +418,11 @@ def gen_sql_scripts(
             # 拼接完整 INSERT 语句
             sqls.append(func_col_sql)
 
-    # --- 应用 ---
+    return sqls
+
+def generator_application_sql(applications):
     apps = applications.get("applications", [])
+    sqls = []
     for app in apps:
         app_id = app.get("id")
         app_name = app.get("name")
@@ -559,72 +433,23 @@ def gen_sql_scripts(
         for app_func in app_funcs:
             func_code = app_func.get("code")
             items.append(f"""    <item code="{func_code}" type="grid" mode="default">
-      <linkcondi><![CDATA[]]></linkcondi>
-      <showcondi><![CDATA[]]></showcondi>
-      <funcscript><![CDATA[]]></funcscript>
-      <showtitle>0</showtitle>
-      <prop class="linked-hash-map"/>
-    </item>""")
+          <linkcondi><![CDATA[]]></linkcondi>
+          <showcondi><![CDATA[]]></showcondi>
+          <funcscript><![CDATA[]]></funcscript>
+          <showtitle>0</showtitle>
+          <prop class="linked-hash-map"/>
+        </item>""")
         items_xml = "\n".join(items)
         app_xml = f"""<app type="{app_type}">
-  <region name="r-0" position="center" type="" width="30%" height="100%" posX="0" posY="0" full="0">
-{items_xml}
-  </region>
-  <prop class="linked-hash-map"/>
-</app>"""
+      <region name="r-0" position="center" type="" width="30%" height="100%" posX="0" posY="0" full="0">
+    {items_xml}
+      </region>
+      <prop class="linked-hash-map"/>
+    </app>"""
         applications_sql = (
             f"DELETE FROM mc_Applications WHERE ID = '{app_id}';\n"
             f"INSERT INTO mc_Applications(ID, Title, Applayout, PwdAuth, WaterMarkAuth, ShowParam)\n"
             f"VALUES('{app_id}', N'{app_name}', N'{app_xml}', 0, 0, 1);\nGO\n"
         )
         sqls.append(applications_sql)
-
-    with open("sql_out.sql", "w", encoding="utf-8") as f:
-        f.write("\n".join(sqls))
-
-    print(f"文件生成成功: {json_out} 和 {sql_out}")
-
-
-# ---------- 使用示例 ----------
-if __name__ == "__main__":
-    gen_sql_scripts("configs/初始化配置.xlsx", "configs/constraints.yaml", "configs/functions.yaml", "configs/applications.yaml")
-
-    # 数据库连接配置
-    server = 'localhost'
-    database = 'JUSTIN'
-    username = 'sa'
-    password = '123456'
-    driver = '{ODBC Driver 17 for SQL Server}'  # 根据你安装的驱动修改
-
-    conn = pyodbc.connect(
-        f'DRIVER={driver};SERVER={server};DATABASE={database};UID={username};PWD={password}'
-    )
-    cursor = conn.cursor()
-
-    # 读取 SQL 文件
-    with open("sql_out.sql", "r", encoding="utf-8") as f:
-        sql_script = f.read()
-
-    # 正则拆分 GO，忽略大小写、前后空白、换行
-    statements = re.split(r'^\s*GO\s*;?\s*$', sql_script, flags=re.MULTILINE | re.IGNORECASE)
-
-    try:
-        for stmt in statements:
-            stmt = stmt.strip()
-            if not stmt:
-                continue
-            try:
-                cursor.execute(stmt)
-            except pyodbc.Error as e:
-                print("执行出错，SQL 片段：\n", stmt)
-                print("错误信息：", e)
-                raise e
-
-        conn.commit()
-        print("SQL 文件执行完成！")
-    except Exception as e:
-        conn.rollback()
-        print("执行出错，已回滚：", e)
-    finally:
-        cursor.close()
-        conn.close()
+    return sqls

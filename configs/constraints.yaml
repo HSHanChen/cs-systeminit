@@ -1,0 +1,118 @@
+meta:
+  name: constraints
+  description: Constraints for the tables config
+  version: 1.0.0
+  author: Justin Han
+  created_at: 2025-08-29
+  settings:
+    - table: md_Organization
+      constraints:
+        - type: UNIQUE
+          columns: [ OrgCode ]
+          # 可选：显式命名约束，若不填生成器会自动拼名
+          name: UQ_md_Organization_OrgCode
+        - type: INDEX
+          columns: [ Disabled, OrgID ]
+          name: IX_md_Organization_Disabled_OrgID
+
+    - table: ou_Org_Operation
+      constraints:
+        - type: INDEX
+          columns: [ OperType, Closed ]
+          name: IX_ou_Org_Operation_OperType_Closed
+        - type: INDEX
+          columns: [ OrgID ]
+          name: IX_ou_Org_Operation_OrgID
+        - type: INDEX
+          columns: [ OrgCode ]
+          name: IX_ou_Org_Operation_OrgCode
+
+    - table: md_Organization_Event
+      constraints:
+        - type: INDEX
+          columns: [ OrgID ]
+          name: IX_md_Organization_Event_OrgID
+        - type: INDEX
+          columns: [ OrgID, BeginDate ]
+          name: IX_md_Organization_Event_OrgID_BeginDate
+        - type: INDEX
+          columns: [ OrgID, EndDate ]
+          name: IX_md_Organization_Event_OrgID_EndDate
+
+    - table: md_Organization_Month
+      constraints:
+        - type: INDEX
+          columns: [ OrgID, Term ]
+          name: IX_md_Organization_Month_OrgID_Term
+
+    - table: md_Position
+      constraints:
+        - type: UNIQUE
+          columns: [ PosCode ]
+        - type: INDEX
+          columns: [ Disabled, PosID ]
+          name: IX_md_Position_Disabled_PosID
+
+    - table: ou_Pos_Operation
+      constraints:
+        - type: INDEX
+          columns: [ OperType, Closed ]
+        - type: INDEX
+          columns: [ PosID ]
+        - type: INDEX
+          columns: [ PosCode ]
+
+    - table: md_Position_Event
+      constraints:
+        - type: INDEX
+          columns: [ PosID ]
+        - type: INDEX
+          columns: [ PosID, BeginDate ]
+        - type: INDEX
+          columns: [ PosID, EndDate ]
+
+    - table: md_Position_Month
+      constraints:
+        - type: INDEX
+          columns: [ PosID, Term ]
+        - type: INDEX
+          columns: [ PosID, Term, PosType ]
+          include: [ PosCode ]
+
+    - table: eu_Pre_EmpInfo
+      constraints:
+        - type: INDEX
+          columns: [ Closed ]
+        - type: INDEX
+          columns: [ EmpNo ]
+
+    - table: eu_Pre_BG_Education
+      constraints:
+        - type: INDEX
+          columns: [ PreOnboardingID ]
+        - type: INDEX
+          columns: [ IsHighest ]
+
+    - table: eu_Pre_BG_WorkExp
+      constraints:
+        - type: INDEX
+          columns: [ PreOnboardingID ]
+
+    - table: eu_Pre_BG_Family
+      constraints:
+        - type: INDEX
+          columns: [ PreOnboardingID ]
+
+    - table: eu_Pre_BG_Certificate
+      constraints:
+        - type: INDEX
+          columns: [ PreOnboardingID ]
+
+    - table: eu_Onboarding
+      constraints:
+        - type: INDEX
+          columns: [ EmpNo ]
+        - type: INDEX
+          columns: [ Closed ]
+        - type: INDEX
+          columns: [ EmpID ]

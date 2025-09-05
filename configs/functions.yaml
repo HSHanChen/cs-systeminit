@@ -1,0 +1,540 @@
+functions:
+# 组织管理
+  - id: 1110001
+    code: O1110001
+    name: 组织信息
+    table: md_Organization
+    tools:
+      - code: T01
+        name: 失效
+        type: execsp
+        xorder: 1
+
+  - id: 1110002
+    code: O1110002
+    name: 失效组织
+    table: md_Organization
+
+  - id: 1110003
+    code: O1110003
+    name: 历史组织信息
+    table: md_Organization_Event
+    params:
+      - code: QueryDate
+        title: 查询日期
+        datetype: DateTime
+        control: DateTime
+        default: "SELECT DATETRUNC(DAY, GETDATE())"
+        notnull: 1
+        condition: "a.BeginDate <= ${QueryDate} AND (a.EndDate IS NULL OR a.EndDate >=${QueryDate})"
+
+  - id: 1110004
+    code: O1110004
+    name: 月度组织信息
+    table: md_Organization_Month
+    params:
+      - code: Term
+        title: 月份
+        datetype: DateTime
+        control: DateTime
+        default: "SELECT DATETRUNC(MONTH, GETDATE())"
+        notnull: 1
+        condition: "a.Term = ${Term}"
+
+  - id: 1110005
+    code: O1110005
+    name: 组织创建
+    table: ou_Org_Operation
+    tools:
+      - code: T01
+        name: 确认创建
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 组织创建历史
+        type: popapp
+        xorder: 1
+
+  - id: 1110006
+    code: O1110006
+    name: 组织变更
+    table: ou_Org_Operation
+    tools:
+      - code: T01
+        name: 确认变更
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 组织变更历史
+        type: popapp
+        xorder: 1
+
+  - id: 1110007
+    code: O1110007
+    name: 组织失效
+    table: ou_Org_Operation
+    tools:
+      - code: T01
+        name: 确认失效
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 组织失效历史
+        type: popapp
+        xorder: 1
+
+  - id: 1110008
+    code: O1110008
+    name: 组织合并
+    table: ou_Org_Operation
+    tools:
+      - code: T01
+        name: 确认合并
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 组织合并历史
+        type: popapp
+        xorder: 1
+
+  - id: 1110009
+    code: O1110009
+    name: 组织操作历史
+    table: ou_Org_Operation
+
+# 岗位管理
+  - id: 1110010
+    code: O1110010
+    name: 岗位信息
+    table: md_Position
+    tools:
+      - code: T01
+        name: 失效
+        type: execsp
+        xorder: 1
+
+  - id: 1110011
+    code: O1110011
+    name: 失效岗位
+    table: md_Position
+
+  - id: 1110012
+    code: O1110012
+    name: 历史岗位信息
+    table: md_Position_Event
+    params:
+      - code: QueryDate
+        title: 查询日期
+        datetype: DateTime
+        control: DateTime
+        default: "SELECT DATETRUNC(DAY, GETDATE())"
+        notnull: 1
+        condition: "a.BeginDate <= ${QueryDate} AND (a.EndDate IS NULL OR a.EndDate >=${QueryDate})"
+
+  - id: 1110013
+    code: O1110013
+    name: 月度岗位信息
+    table: md_Position_Month
+    params:
+      - code: Term
+        title: 月份
+        datetype: DateTime
+        control: DateTime
+        default: "SELECT DATETRUNC(MONTH, GETDATE())"
+        notnull: 1
+        condition: "a.Term = ${Term}"
+
+  - id: 1110014
+    code: O1110014
+    name: 岗位创建
+    table: ou_Pos_Operation
+    tools:
+      - code: T01
+        name: 确认创建
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 岗位创建历史
+        type: popapp
+        xorder: 1
+
+  - id: 1110015
+    code: O1110015
+    name: 岗位变更
+    table: ou_Pos_Operation
+    tools:
+      - code: T01
+        name: 确认变更
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 岗位变更历史
+        type: popapp
+        xorder: 1
+
+  - id: 1110016
+    code: O1110016
+    name: 岗位失效
+    table: ou_Pos_Operation
+    tools:
+      - code: T01
+        name: 确认失效
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 岗位失效历史
+        type: popapp
+        xorder: 1
+
+  - id: 1110017
+    code: O1110017
+    name: 岗位操作历史
+    table: ou_Pos_Operation
+
+# 员工事务
+  - id: 1120001
+    code: E1120001
+    name: 在职员工
+    table: md_Employee
+    tools:
+      - code: APP01
+        name: 员工生命周期
+        type: popapp
+        xorder: 1
+      - code: APP02
+        name: 员工履历表
+        type: popapp
+        xorder: 2
+      - code: APP03
+        name: 在职证明
+        type: popapp
+        xorder: 3
+  - id: 1120002
+    code: E1120002
+    name: 离职员工
+    table: md_Employee_Event
+    tools:
+      - code: APP01
+        name: 员工生命周期
+        type: popapp
+        xorder: 1
+      - code: APP02
+        name: 员工履历表
+        type: popapp
+        xorder: 2
+      - code: APP03
+        name: 离职证明
+        type: popapp
+        xorder: 3
+
+  - id: 1120003
+    code: E1120003
+    name: 所有员工
+    table: md_Employee
+    tools:
+      - code: APP01
+        name: 员工生命周期
+        type: popapp
+        xorder: 1
+      - code: APP02
+        name: 员工履历表
+        type: popapp
+        xorder: 2
+      - code: APP03
+        name: 员工信息修改
+        type: popapp
+        xorder: 3
+
+  - id: 1120004
+    code: E1120004
+    name: 历史员工信息
+    table: md_Employee_Event
+    params:
+      - code: QueryDate
+        title: 查询日期
+        datetype: DateTime
+        control: DateTime
+        default: "SELECT DATETRUNC(DAY, GETDATE())"
+        notnull: 1
+        condition: "a.BeginDate <= ${QueryDate} AND (a.EndDate IS NULL OR a.EndDate >=${QueryDate})"
+
+  - id: 1120005
+    code: E1120005
+    name: 月度员工信息
+    table: md_Employee_Month
+    params:
+      - code: Term
+        title: 月份
+        datetype: DateTime
+        control: DateTime
+        default: "SELECT DATETRUNC(MONTH, GETDATE())"
+        notnull: 1
+        condition: "a.Term = ${Term}"
+
+
+  - id: 1120006
+    code: E1120006
+    name: 预入职登记
+    table: eu_Pre_EmpInfo
+    tools:
+      - code: T01
+        name: 发送录用流程
+        type: execsp
+        xorder: 1
+      - code: T02
+        name: 发送Offer #即发送个人信息填写通知
+        type: execsp
+        xorder: 2
+      - code: T03
+        name: 退回候选人补充资料
+        type: execsp
+        xorder: 3
+      - code: T04
+        name: 转入职管理
+        type: execsp
+        xorder: 4
+      - code: APP01
+        name: 查看流程
+        type: popapp
+        xorder: 1
+      - code: APP02
+        name: 采集信息查看
+        type: popapp
+        xorder: 2
+      - code: APP03
+        name: 入职登记表
+        type: popapp
+        xorder: 3
+      - code: APP04
+        name: 预入职历史
+        type: popapp
+        xorder: 4
+
+  - id: 1120007
+    code: E1120007
+    name: 预入职历史
+    table: eu_Pre_EmpInfo
+
+  - id: 1120008
+    code: E1120008
+    name: 员工入职
+    table: eu_Onboarding
+    tools:
+      - code: T01
+        name: 生成工号
+        type: execsp
+        xorder: 1
+      - code: T02
+        name: 发送入职流程
+        type: execsp
+        xorder: 2
+      - code: T03
+        name: 入职处理
+        type: execsp
+        xorder: 3
+      - code: APP01
+        name: 查看流程
+        type: popapp
+        xorder: 1
+      - code: APP02
+        name: 入职背景信息
+        type: popapp
+        xorder: 2
+      - code: APP03
+        name: 入职历史
+        type: popapp
+        xorder: 3
+
+  - id: 1120009
+    code: E1120009
+    name: 入职历史
+    table: eu_Onboarding
+
+  - id: 1120010
+    code: E1120010
+    name: 入职填写-教育经历
+    table: eu_Onboard_Education
+
+  - id: 1120011
+    code: E1120011
+    name: 入职填写-工作经历
+    table: eu_Onboard_WorkExp
+
+  - id: 1120012
+    code: E1120012
+    name: 入职填写-家庭成员
+    table: eu_Onboard_Family
+
+  - id: 1120013
+    code: E1120013
+    name: 入职填写-资格证书
+
+  - id: 1120014
+    code: E1120014
+    name: 入职填写-附件信息
+    table: eu_Onboard_Attachments
+
+  - id: 1120015
+    code: E1120015
+    name: 基础信息变更
+    table: eu_Emp_InfoChange
+    tools:
+      - code: T01
+        name: 确认变更
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 基础信息变更历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120016
+    code: E1120016
+    name: 基础信息变更历史
+    table: eu_Emp_InfoChange
+
+  - id: 1120017
+    code: E1120017
+    name: 员工调动
+    table: eu_Emp_Transfer
+    tools:
+      - code: T01
+        name: 确认调动
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 员工调动历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120018
+    code: E1120018
+    name: 员工调动历史
+    table: eu_Emp_Transfer
+
+  - id: 1120019
+    code: E1120019
+    name: 员工转正
+    table: eu_Emp_Regular
+    tools:
+      - code: T01
+        name: 确认转正
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 员工转正历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120020
+    code: E1120020
+    name: 员工转正历史
+    table: eu_Emp_Regular
+
+  - id: 1120021
+    code: E1120021
+    name: 员工离职
+    table: eu_Emp_Resign
+    tools:
+      - code: T01
+        name: 确认离职
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 员工离职历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120022
+    code: E1120022
+    name: 员工离职历史
+    table: eu_Emp_Resign
+
+  - id: 1120023
+    code: E1120023
+    name: 合同信息
+    table: md_Employee
+    tools:
+      - code: APP01
+        name: 历史合同信息
+        type: popapp
+        xorder: 1
+
+  - id: 1120024
+    code: E1120024
+    name: 历史合同信息
+    table: eu_Contract_Event
+    params:
+      - code: QueryDate
+        title: 查询日期
+        datetype: DateTime
+        control: DateTime
+        default: "SELECT DATETRUNC(DAY, GETDATE())"
+        notnull: 1
+        condition: "a.BeginDate <= ${QueryDate} AND (a.EndDate IS NULL OR a.EndDate >=${QueryDate})"
+
+  - id: 1120025
+    code: E1120025
+    name: 新签
+    table: eu_Contract_Operation
+    tools:
+      - code: T01
+        name: 确认新签
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 合同新签历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120026
+    code: E1120026
+    name: 合同变更
+    table: eu_Contract_Operation
+    tools:
+      - code: T01
+        name: 确认变更
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 合同变更历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120027
+    code: E1120027
+    name: 合同续签
+    table: eu_Contract_Operation
+    tools:
+      - code: T01
+        name: 确认续签
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 合同续签历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120028
+    code: E1120028
+    name: 合同终止
+    table: eu_Contract_Operation
+    tools:
+      - code: T01
+        name: 确认终止
+        type: execsp
+        xorder: 1
+      - code: APP01
+        name: 合同终止历史
+        type: popapp
+        xorder: 1
+
+  - id: 1120029
+    code: E1120029
+    name: 合同操作历史
+    table: eu_Contract_Operation
+
+  - id: 1120030
+    code: E1120030
+    name: 员工兼岗
+    table: eu_Concurrent
